@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HK Spotify</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 0 10px;
+    background: #fafafa;
+    color: #222;
+  }
+  h1 { text-align: center; }
+  button, input[type="text"] { font-size: 1rem; }
+  button { cursor: pointer; }
+  #upload-btn {
+    background: #cc0000;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+  }
+  #video-container {
+    display: flex;
+    max-width: 640px;
+    margin: 20px auto;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    height: 90px;
+    align-items: center;
+  }
+  #thumbnail-wrapper {
+    flex-shrink: 0;
+    width: 160px;
+    height: 90px;
+    position: relative;
+    cursor: pointer;
+    background: #000;
+  }
+  #thumbnail-img {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #audio-player {
+    width: 100%;
+    height: 90px;
+    background: transparent;
+    outline: none;
+    border: none;
+  }
+  #video-header {
+    flex-grow: 1;
+    padding: 0 12px;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #video-header h2 {
+    font-size: 1rem;
+    margin: 0 0 6px 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  #video-actions { display: flex; gap: 12px; font-size: 0.9rem; }
+  #like-btn, #dislike-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+  }
+  #like-btn.liked, #dislike-btn.liked { color: #065fd4; font-weight: bold; }
+  #comments-section { max-width: 640px; margin: 30px auto; }
+  #new-comment { display: flex; gap: 10px; margin-bottom: 20px; }
+  #new-comment input { flex-grow: 1; padding: 8px; }
+  .comment { margin-bottom: 15px; }
+  .comment-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .comment-text span { word-break: break-word; }
+  .comment-text button { background: none; border: none; cursor: pointer; color: gray; }
+  .comment-text button.liked { color: blue; }
+  .reply-input { margin-top: 6px; display: flex; gap: 6px; }
+  .reply-input input { flex-grow: 1; padding: 6px; }
+  .replies { margin-left: 20px; margin-top: 10px; }
+  #playlist { max-width: 640px; margin: 20px auto 0; }
+  #playlist h3 { margin-bottom: 10px; }
+  #playlist-list {
+    list-style: none;
+    padding-left: 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+  }
+  #playlist-list li {
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+  }
+  #playlist-list li:hover { background: #f0f0f0; }
+  #playlist-list li.selected { font-weight: bold; background: #d0e4fd; }
+  .loading { color: #888; font-style: italic; text-align: center; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<h1>Hong Kong's Spotify</h1>
+
+<div id="upload-section">
+  <button id="upload-btn">Upload</button>
+  <input type="file" id="audio-file-input" accept="audio/*" style="display:none" />
+</div>
+
+<div id="title-section" style="display:none; margin-top:20px;">
+  <p><b>Step 2:</b> Enter a title:</p>
+  <input type="text" id="audio-title-input" placeholder="Audio title"
+    style="width:100%; max-width:400px; padding:8px;" />
+  <br />
+  <button id="title-next-btn" style="margin-top:10px; padding:6px 12px;">Next</button>
+</div>
+
+<div id="thumbnail-section" style="display:none; margin-top:20px;">
+  <p><b>Step 3:</b> Choose a thumbnail:</p>
+  <button id="thumbnail-btn"
+    style="background:#0073e6;color:white;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;">
+    Select Image
+  </button>
+  <input type="file" id="thumbnail-file-input" accept="image/*" style="display:none" />
+  <p id="upload-status" class="loading" style="display:none;">Uploading... please wait</p>
+</div>
+
+<div id="playlist" style="display:none;">
+  <h3>Uploaded Audios</h3>
+  <ul id="playlist-list"></ul>
+</div>
+
+<div id="video-player-section" style="display:none; margin-top:30px;">
+  <div id="video-container">
+    <div id="thumbnail-wrapper">
+      <img id="thumbnail-img" alt="Thumbnail" />
+      <audio id="audio-player" controls></audio>
+    </div>
+    <div id="video-header">
+      <h2 id="video-title"></h2>
+      <div id="video-actions">
+        <button id="like-btn">👍 0</button>
+        <button id="dislike-btn">👎 0</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="comments-section">
+    <h3>Comments</h3>
+    <div id="new-comment">
+      <input type="text" id="new-comment-input" placeholder="Add a public comment..." />
+      <button id="add-comment-btn">Comment</button>
+    </div>
+    <div id="comments-list"></div>
+  </div>
+
+  <div style="margin-top:30px; text-align:center;">
+    <button id="reset-btn" style="color:#cc0000;">Upload Another Audio</button>
+  </div>
+</div>
+
+<script>
+// ======================================================
+const SUPABASE_URL = 'https://jtyxcchuzfwncfneubb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0eXhjY2h1emZ2d25jZm5ldWJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NDA5NjUsImV4cCI6MjA5NDIxNjk2NX0.BvdLGPLDbCI099omnimJZ4PzJTEOlwNJ6JdN2cyAFVU';
+// ======================================================
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Elements
+const uploadBtn = document.getElementById('upload-btn');
+const audioFileInput = document.getElementById('audio-file-input');
+const titleSection = document.getElementById('title-section');
+const audioTitleInput = document.getElementById('audio-title-input');
+const titleNextBtn = document.getElementById('title-next-btn');
+const thumbnailSection = document.getElementById('thumbnail-section');
+const thumbnailBtn = document.getElementById('thumbnail-btn');
+const thumbnailFileInput = document.getElementById('thumbnail-file-input');
+const uploadStatus = document.getElementById('upload-status');
+const videoPlayerSection = document.getElementById('video-player-section');
+const thumbnailImg = document.getElementById('thumbnail-img');
+const audioPlayer = document.getElementById('audio-player');
+const videoTitle = document.getElementById('video-title');
+const likeBtn = document.getElementById('like-btn');
+const dislikeBtn = document.getElementById('dislike-btn');
+const newCommentInput = document.getElementById('new-comment-input');
+const addCommentBtn = document.getElementById('add-comment-btn');
+const commentsList = document.getElementById('comments-list');
+const resetBtn = document.getElementById('reset-btn');
+const thumbnailWrapper = document.getElementById('thumbnail-wrapper');
+const playlist = document.getElementById('playlist');
+const playlistList = document.getElementById('playlist-list');
+
+// State
+let currentAudioId = null;
+let currentLikes = 0;
+let currentDislikes = 0;
+let userVote = 0;
+let tempAudioFile = null;
+let tempTitle = '';
+
+async function init() {
+  await refreshPlaylist();
+}
+
+// ── PLAYLIST ──────────────────────────────────────────
+
+async function refreshPlaylist() {
+  const { data, error } = await db
+    .from('audios')
+    .select('id, title')
+    .order('created_at', { ascending: false });
+
+  if (error) { console.error(error); return; }
+  if (!data || data.length === 0) { playlist.style.display = 'none'; return; }
+
+  playlist.style.display = 'block';
+  playlistList.innerHTML = '';
+
+  data.forEach(a => {
+    const li = document.createElement('li');
+    li.textContent = a.title;
+    li.classList.toggle('selected', a.id === currentAudioId);
+    li.addEventListener('click', () => loadAudioById(a.id));
+    playlistList.appendChild(li);
+  });
+}
+
+// ── LOAD AUDIO ────────────────────────────────────────
+
+async function loadAudioById(id) {
+  const { data, error } = await db
+    .from('audios')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !data) { console.error(error); return; }
+
+  currentAudioId = id;
+  currentLikes = data.likes;
+  currentDislikes = data.dislikes;
+  userVote = parseInt(localStorage.getItem(`vote_${id}`) || '0');
+
+  videoTitle.textContent = data.title;
+  audioPlayer.src = data.audio_url;
+  thumbnailImg.src = data.thumbnail_url;
+
+  updateLikesUI();
+  videoPlayerSection.style.display = 'block';
+
+  refreshPlaylist();
+  await loadComments();
+}
+
+// ── LIKES ─────────────────────────────────────────────
+
+function updateLikesUI() {
+  likeBtn.textContent = `👍 ${currentLikes}`;
+  dislikeBtn.textContent = `👎 ${currentDislikes}`;
+  likeBtn.classList.toggle('liked', userVote === 1);
+  dislikeBtn.classList.toggle('liked', userVote === -1);
+}
+
+likeBtn.addEventListener('click', async () => {
+  if (!currentAudioId) return;
+  let likeDelta = 0, dislikeDelta = 0;
+
+  if (userVote === 1) {
+    userVote = 0; likeDelta = -1;
+  } else {
+    if (userVote === -1) dislikeDelta = -1;
+    userVote = 1; likeDelta = 1;
+  }
+
+  currentLikes += likeDelta;
+  currentDislikes += dislikeDelta;
+  localStorage.setItem(`vote_${currentAudioId}`, userVote);
+  updateLikesUI();
+
+  await db.from('audios').update({
+    likes: currentLikes,
+    dislikes: currentDislikes
+  }).eq('id', currentAudioId);
+});
+
+dislikeBtn.addEventListener('click', async () => {
+  if (!currentAudioId) return;
+  let likeDelta = 0, dislikeDelta = 0;
+
+  if (userVote === -1) {
+    userVote = 0; dislikeDelta = -1;
+  } else {
+    if (userVote === 1) likeDelta = -1;
+    userVote = -1; dislikeDelta = 1;
+  }
+
+  currentLikes += likeDelta;
+  currentDislikes += dislikeDelta;
+  localStorage.setItem(`vote_${currentAudioId}`, userVote);
+  updateLikesUI();
+
+  await db.from('audios').update({
+    likes: currentLikes,
+    dislikes: currentDislikes
+  }).eq('id', currentAudioId);
+});
+
+// ── COMMENTS ──────────────────────────────────────────
+
+async function loadComments() {
+  const { data, error } = await db
+    .from('comments')
+    .select('*')
+    .eq('audio_id', currentAudioId)
+    .order('created_at', { ascending: true });
+
+  if (error) { console.error(error); return; }
+
+  const map = {};
+  const roots = [];
+  data.forEach(c => { map[c.id] = { ...c, children: [] }; });
+  data.forEach(c => {
+    if (c.parent_id) map[c.parent_id]?.children.push(map[c.id]);
+    else roots.push(map[c.id]);
+  });
+
+  renderComments(roots, commentsList);
+}
+
+function renderComments(comms, container) {
+  container.innerHTML = '';
+  comms.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'comment';
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'comment-text';
+
+    const span = document.createElement('span');
+    span.textContent = c.text;
+
+    const likedByUser = localStorage.getItem(`comment_like_${c.id}`) === '1';
+
+    const likeBtnC = document.createElement('button');
+    likeBtnC.textContent = `👍 ${c.likes}`;
+    likeBtnC.classList.toggle('liked', likedByUser);
+    likeBtnC.addEventListener('click', async () => {
+      const wasLiked = localStorage.getItem(`comment_like_${c.id}`) === '1';
+      const newLikes = wasLiked ? c.likes - 1 : c.likes + 1;
+      localStorage.setItem(`comment_like_${c.id}`, wasLiked ? '0' : '1');
+      await db.from('comments').update({ likes: newLikes }).eq('id', c.id);
+      c.likes = newLikes;
+      await loadComments();
+    });
+
+    textDiv.appendChild(span);
+    textDiv.appendChild(likeBtnC);
+    div.appendChild(textDiv);
+
+    const replyDiv = document.createElement('div');
+    replyDiv.className = 'reply-input';
+    const replyInput = document.createElement('input');
+    replyInput.type = 'text';
+    replyInput.placeholder = 'Reply...';
+    const replyBtn = document.createElement('button');
+    replyBtn.textContent = 'Reply';
+    replyBtn.addEventListener('click', async () => {
+      const val = replyInput.value.trim();
+      if (!val) return alert('Reply cannot be empty.');
+      await db.from('comments').insert({
+        audio_id: currentAudioId,
+        parent_id: c.id,
+        text: val,
+        likes: 0
+      });
+      replyInput.value = '';
+      await loadComments();
+    });
+    replyDiv.appendChild(replyInput);
+    replyDiv.appendChild(replyBtn);
+    div.appendChild(replyDiv);
+
+    if (c.children && c.children.length > 0) {
+      const repliesContainer = document.createElement('div');
+      repliesContainer.className = 'replies';
+      renderComments(c.children, repliesContainer);
+      div.appendChild(repliesContainer);
+    }
+
+    container.appendChild(div);
+  });
+}
+
+addCommentBtn.addEventListener('click', async () => {
+  const val = newCommentInput.value.trim();
+  if (!val) return alert('Comment cannot be empty.');
+  await db.from('comments').insert({
+    audio_id: currentAudioId,
+    parent_id: null,
+    text: val,
+    likes: 0
+  });
+  newCommentInput.value = '';
+  await loadComments();
+});
+
+newCommentInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') addCommentBtn.click();
+});
+
+// ── UPLOAD FLOW ───────────────────────────────────────
+
+uploadBtn.addEventListener('click', () => {
+  audioFileInput.value = '';
+  audioFileInput.click();
+});
+
+audioFileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file || !file.type.startsWith('audio/')) return alert('Please select an audio file.');
+  tempAudioFile = file;
+  titleSection.style.display = 'block';
+  audioTitleInput.value = '';
+  audioTitleInput.focus();
+});
+
+titleNextBtn.addEventListener('click', () => {
+  const val = audioTitleInput.value.trim();
+  if (!val) return alert('Please enter a title.');
+  tempTitle = val;
+  titleSection.style.display = 'none';
+  thumbnailSection.style.display = 'block';
+});
+
+thumbnailBtn.addEventListener('click', () => {
+  thumbnailFileInput.value = '';
+  thumbnailFileInput.click();
+});
+
+thumbnailFileInput.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file || !file.type.startsWith('image/')) return alert('Please select an image file.');
+
+  uploadStatus.style.display = 'block';
+  thumbnailBtn.disabled = true;
+
+  try {
+    const audioExt = tempAudioFile.name.split('.').pop();
+    const audioPath = `${Date.now()}_audio.${audioExt}`;
+    const { error: audioErr } = await db.storage
+      .from('audio')
+      .upload(audioPath, tempAudioFile, { contentType: tempAudioFile.type });
+    if (audioErr) throw audioErr;
+
+    const audioURL = db.storage.from('audio').getPublicUrl(audioPath).data.publicUrl;
+
+    const imgExt = file.name.split('.').pop();
+    const imgPath = `${Date.now()}_thumb.${imgExt}`;
+    const { error: imgErr } = await db.storage
+      .from('thumbnails')
+      .upload(imgPath, file, { contentType: file.type });
+    if (imgErr) throw imgErr;
+
+    const thumbnailURL = db.storage.from('thumbnails').getPublicUrl(imgPath).data.publicUrl;
+
+    const { data, error: dbErr } = await db.from('audios').insert({
+      title: tempTitle,
+      audio_url: audioURL,
+      thumbnail_url: thumbnailURL,
+      likes: 0,
+      dislikes: 0
+    }).select().single();
+    if (dbErr) throw dbErr;
+
+    thumbnailSection.style.display = 'none';
+    uploadStatus.style.display = 'none';
+    thumbnailBtn.disabled = false;
+
+    await refreshPlaylist();
+    await loadAudioById(data.id);
+
+  } catch (err) {
+    console.error(err);
+    alert('Upload failed: ' + err.message);
+    uploadStatus.style.display = 'none';
+    thumbnailBtn.disabled = false;
+  }
+});
+
+// ── THUMBNAIL CLICK TO PLAY/PAUSE ─────────────────────
+
+thumbnailWrapper.addEventListener('click', () => {
+  if (audioPlayer.paused) audioPlayer.play();
+  else audioPlayer.pause();
+});
+
+audioPlayer.addEventListener('play', () => { thumbnailImg.style.display = 'none'; });
+audioPlayer.addEventListener('pause', () => { thumbnailImg.style.display = 'block'; });
+audioPlayer.addEventListener('ended', () => { thumbnailImg.style.display = 'block'; });
+
+// ── RESET ─────────────────────────────────────────────
+
+resetBtn.addEventListener('click', () => {
+  tempAudioFile = null;
+  tempTitle = '';
+  audioPlayer.src = '';
+  thumbnailImg.src = '';
+  videoTitle.textContent = '';
+  newCommentInput.value = '';
+  audioTitleInput.value = '';
+  videoPlayerSection.style.display = 'none';
+  thumbnailSection.style.display = 'none';
+  titleSection.style.display = 'none';
+});
+
+// ── INIT ──────────────────────────────────────────────
+
+init();
+</script>
+
+</body>
+</html>
